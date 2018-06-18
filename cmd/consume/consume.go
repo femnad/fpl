@@ -12,6 +12,58 @@ import (
 	"github.com/streadway/amqp"
 )
 
+func getCommand(delivery amqp.Delivery) []string {
+	commandString := string(delivery.Body)
+	log.Printf("Got command: %s\n", commandString)
+	return strings.Split(commandString, " ")
+}
+
+func handleWait(cmd exec.Cmd) {
+	err := cmd.Wait()
+	if err == nil {
+		log.Printf("Command exited normally\n")
+	} else {
+		fmt.Printf("Command exited with %s\n", err)
+	}
+}
+
+func handleOutput(stdOut, stdErr bytes.Buffer) {
+	stdoutOutput := stdOut.String()
+	if stdoutOutput != "" {
+		log.Printf("Stdout output is:\n%s", stdOut.String())
+	}
+	stderrOutput := stdErr.String()
+	if stderrOutput != "" {
+		log.Printf("Stderr output is:\n%s", stdErr.String())
+	}
+}
+
+func executeCommand(commandList []string) {
+	cmd := exec.Command(commandList[0], commandList[1:]...)
+
+	var stdOut bytes.Buffer
+	var stdErr bytes.Buffer
+	cmd.Stdout = &stdOut
+	cmd.Stderr = &stdErr
+
+	err := cmd.Start()
+	if err != nil {
+		log.Printf("Error when running command %s", err)
+		return
+	}
+
+	handleWait(*cmd)
+
+	handleOutput(stdOut, stdErr)
+}
+
+func consumeMessages(messages <-chan amqp.Delivery) {
+	for d := range messages {
+		commandList := getCommand(d)
+		executeCommand(commandList)
+	}
+}
+
 func main() {
 	host := flag.String("host", "localhost", "Host for RabbitMQ server")
 	port := flag.Int("port", 5672, "Port for RabbitMQ server")
@@ -34,34 +86,7 @@ func main() {
 
 	forever := make(chan bool)
 
-	go func() {
-		for d := range msgs {
-			commandString := string(d.Body)
-			log.Printf("Will run command: %s\n", commandString)
-			commandList := strings.Split(commandString, " ")
-			cmd := exec.Command(commandList[0], commandList[1:]...)
-			var out bytes.Buffer
-			var stdErr bytes.Buffer
-			cmd.Stdout = &out
-			cmd.Stderr = &stdErr
-			err := cmd.Start()
-			if err != nil {
-				log.Fatal(err)
-			}
-			err = cmd.Wait()
-			if err == nil {
-				log.Printf("Command exited with %s\n", err)
-			}
-			stdoutOutput := out.String()
-			if stdoutOutput != "" {
-				log.Printf("Stdout output is:\n%s", out.String())
-			}
-			stderrOutput := stdErr.String()
-			if stderrOutput != "" {
-				log.Printf("Stderr output is:\n%s", stdErr.String())
-			}
-		}
-	}()
+	go consumeMessages(msgs)
 
 	log.Printf("Waiting to consume messages")
 	<-forever
