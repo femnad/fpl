@@ -64,12 +64,8 @@ func consumeMessages(messages <-chan amqp.Delivery) {
 	}
 }
 
-func main() {
-	host := flag.String("host", "localhost", "Host for RabbitMQ server")
-	port := flag.Int("port", 5672, "Port for RabbitMQ server")
-	flag.Parse()
-
-	address := fmt.Sprintf("amqp://%s:%d", *host, *port)
+func consume(host string, port int, queueName string) {
+	address := fmt.Sprintf("amqp://%s:%d", host, port)
 	conn, err := amqp.Dial(address)
 	mare.PanicIfErr(err)
 	defer conn.Close()
@@ -78,7 +74,7 @@ func main() {
 	mare.PanicIfErr(err)
 	defer ch.Close()
 
-	q, err := ch.QueueDeclare("cmds", false, false, false, false, nil)
+	q, err := ch.QueueDeclare(queueName, false, false, false, false, nil)
 	mare.PanicIfErr(err)
 
 	msgs, err := ch.Consume(q.Name, "", true, false, false, false, nil)
@@ -90,4 +86,13 @@ func main() {
 
 	log.Printf("Waiting to consume messages")
 	<-forever
+}
+
+func main() {
+	host := flag.String("host", "localhost", "Host for RabbitMQ server")
+	port := flag.Int("port", 5672, "Port for RabbitMQ server")
+	queueName := flag.String("queue", "default", "Queue name")
+	flag.Parse()
+
+	consume(*host, *port, *queueName)
 }
