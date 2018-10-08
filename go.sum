@@ -1,0 +1,4 @@
+github.com/femnad/mare v0.0.2 h1:cHqhTqaMkySMNdeAqQkO9MED14toxl0H6EOse/fvg6E=
+github.com/femnad/mare v0.0.2/go.mod h1:MWuxQKazHid3ZsL3VuFBSx7jlWVQUUklYW+w5p6O9go=
+github.com/streadway/amqp v0.0.0-20180806233856-70e15c650864 h1:Oj3PUEs+OUSYUpn35O+BE/ivHGirKixA3+vqA0Atu9A=
+github.com/streadway/amqp v0.0.0-20180806233856-70e15c650864/go.mod h1:1WNBiOZtZQLpVAyu0iTduoJL9hEsMloAK5XWrtW0xdY=
