@@ -1,14 +1,18 @@
 package main
 
 import (
+	"path/filepath"
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"log"
+	"os"
 	"os/exec"
 	"strings"
 
 	"github.com/femnad/mare"
+	"github.com/google/uuid"
 	"github.com/streadway/amqp"
 )
 
@@ -27,18 +31,45 @@ func handleWait(cmd exec.Cmd) {
 	}
 }
 
-func handleOutput(stdOut, stdErr bytes.Buffer) {
-	stdoutOutput := stdOut.String()
-	if stdoutOutput != "" {
-		log.Printf("Stdout output is:\n%s", stdOut.String())
-	}
-	stderrOutput := stdErr.String()
-	if stderrOutput != "" {
-		log.Printf("Stderr output is:\n%s", stdErr.String())
+func ensureFileDir(fileName string) {
+	fileDir := filepath.Dir(fileName)
+	os.MkdirAll(fileDir, 0755)
+}
+
+func consumeBufferToFile(buffer *bytes.Buffer, fileName string) {
+	ensureFileDir(fileName)
+
+	f, err := os.OpenFile(fileName, os.O_CREATE | os.O_RDWR, 0644)
+	mare.PanicIfErr(err)
+	defer f.Close()
+
+	for {
+		line, err := buffer.ReadString('\n')
+		if err != nil {
+			mare.PanicIfNotOfType(err, io.EOF)
+			break
+		}
+		_, err = f.WriteString(line)
+		mare.PanicIfErr(err)
 	}
 }
 
-func executeCommand(commandList []string) {
+func getUUID() string {
+	uuid, err := uuid.NewUUID()
+	mare.PanicIfErr(err)
+	return uuid.String()
+}
+
+func handleOutput(stdOut, stdErr *bytes.Buffer, cfg *config) {
+	fileName := getUUID()
+	stdOutFile := fmt.Sprintf("%s/%s.out", cfg.outputDir, fileName)
+	consumeBufferToFile(stdOut, stdOutFile)
+
+	stdErrFile := fmt.Sprintf("%s/%s.err", cfg.outputDir, fileName)
+	consumeBufferToFile(stdErr, stdErrFile)
+}
+
+func executeCommand(commandList []string, cfg *config) {
 	cmd := exec.Command(commandList[0], commandList[1:]...)
 
 	var stdOut bytes.Buffer
@@ -54,17 +85,17 @@ func executeCommand(commandList []string) {
 
 	handleWait(*cmd)
 
-	handleOutput(stdOut, stdErr)
+	handleOutput(&stdOut, &stdErr, cfg)
 }
 
-func consumeMessages(messages <-chan amqp.Delivery) {
+func consumeMessages(messages <-chan amqp.Delivery, cfg *config) {
 	for d := range messages {
 		commandList := getCommand(d)
-		executeCommand(commandList)
+		executeCommand(commandList, cfg)
 	}
 }
 
-func consume(host string, port int, queueName string) {
+func consume(host string, port int, queueName string, cfg *config) {
 	address := fmt.Sprintf("amqp://%s:%d", host, port)
 	conn, err := amqp.Dial(address)
 	mare.PanicIfErr(err)
@@ -82,10 +113,19 @@ func consume(host string, port int, queueName string) {
 
 	forever := make(chan bool)
 
-	go consumeMessages(msgs)
+	go consumeMessages(msgs, cfg)
 
 	log.Printf("Waiting to consume messages")
 	<-forever
+}
+
+type config struct {
+	outputDir string
+}
+
+func getDefaultConfig() *config {
+	cfg := config{outputDir: "/var/log/fpl/tasks"}
+	return &cfg
 }
 
 func main() {
@@ -94,5 +134,6 @@ func main() {
 	queueName := flag.String("queue", "default", "Queue name")
 	flag.Parse()
 
-	consume(*host, *port, *queueName)
+	cfg := getDefaultConfig()
+	consume(*host, *port, *queueName, cfg)
 }
