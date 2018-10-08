@@ -14,32 +14,32 @@ func getCommand(commandList []string) string {
 	return strings.Join(commandList, " ")
 }
 
-func getConnection(host string, port int) amqp.Connection {
+func getConnection(host string, port int) *amqp.Connection {
 	address := fmt.Sprintf("amqp://%s:%d", host, port)
 	conn, err := amqp.Dial(address)
 	mare.PanicIfErr(err)
-	return *conn
+	return conn
 }
 
-func getChannel(connection amqp.Connection) amqp.Channel {
+func getChannel(connection *amqp.Connection) *amqp.Channel {
 	ch, err := connection.Channel()
 	mare.PanicIfErr(err)
-	return *ch
+	return ch
 }
 
-func getPublishing(body string) amqp.Publishing {
-	return amqp.Publishing{ContentType: "text/plain", Body: []byte(body)}
+func getPublishing(body string) *amqp.Publishing {
+	return &amqp.Publishing{ContentType: "text/plain", Body: []byte(body)}
 }
 
-func declareQueue(ch amqp.Channel, queueName string) amqp.Queue {
+func declareQueue(ch *amqp.Channel, queueName string) *amqp.Queue {
 	q, err := ch.QueueDeclare(queueName, false, false, false, false, nil)
 	mare.PanicIfErr(err)
-	return q
+	return &q
 }
 
-func publishMessage(channel amqp.Channel, queue amqp.Queue, message string) {
+func publishMessage(channel *amqp.Channel, queue amqp.Queue, message string) {
 	publishing := getPublishing(message)
-	err := channel.Publish("", queue.Name, false, false, publishing)
+	err := channel.Publish("", queue.Name, false, false, *publishing)
 	mare.PanicIfErr(err)
 }
 
@@ -54,7 +54,7 @@ func produceMessage(host string, port int, queueName string, commandList []strin
 
 	q := declareQueue(ch, queueName)
 
-	publishMessage(ch, q, command)
+	publishMessage(ch, *q, command)
 }
 
 func main() {
